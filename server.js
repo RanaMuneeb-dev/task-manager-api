@@ -5,6 +5,8 @@ const swaggerJsDoc = require('swagger-jsdoc');
 require('dotenv').config();
 
 const app = express();
+
+// Middleware
 app.use(express.json());
 
 // Swagger Configuration
@@ -16,7 +18,11 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'REST API with Auth, Validation, and Documentation',
     },
-    servers: [{ url: 'http://localhost:5000' }],
+    servers: [
+      {
+        url: process.env.RENDER_EXTERNAL_URL || 'http://localhost:5000',
+      },
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -32,6 +38,11 @@ const swaggerOptions = {
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+
+// Root URL Redirect to Swagger Docs
+app.get('/', (req, res) => {
+  res.redirect('/api-docs');
+});
 
 // Routes
 app.use('/api/auth', require('./src/routes/auth'));
