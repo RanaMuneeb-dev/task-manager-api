@@ -2,11 +2,24 @@ const express = require('express');
 const mongoose = require('mongoose');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsDoc = require('swagger-jsdoc');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
 
-// Middleware
+// Security Middlewares
+app.use(helmet());
+
+// Rate Limiter (Max 100 requests per 15 minutes per IP)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { message: 'Too many requests, please try again later.' },
+});
+app.use('/api/', limiter);
+
+// Core Middleware
 app.use(express.json());
 
 // Swagger Configuration
@@ -42,6 +55,11 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 // Root URL Redirect to Swagger Docs
 app.get('/', (req, res) => {
   res.redirect('/api-docs');
+});
+
+// Production Health Check Endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'UP', timestamp: new Date() });
 });
 
 // Routes
