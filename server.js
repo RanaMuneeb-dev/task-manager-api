@@ -4,32 +4,34 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerJsDoc = require('swagger-jsdoc');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const logger = require('./src/utils/logger');
+const errorHandler = require('./src/middleware/errorMiddleware');
 require('dotenv').config();
 
 const app = express();
 
-// Security Middlewares
+// 1. Security Headers
 app.use(helmet());
 
-// Rate Limiter (Max 100 requests per 15 minutes per IP)
+// 2. Body Parser Size Limit
+app.use(express.json({ limit: '10kb' }));
+
+// 3. Global Rate Limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: { message: 'Too many requests, please try again later.' },
+  message: { success: false, message: 'Too many requests, please try again later.', code: 'TOO_MANY_REQUESTS' },
 });
 app.use('/api/', limiter);
 
-// Core Middleware
-app.use(express.json());
-
-// Swagger Configuration
+// 4. Swagger Documentation Setup
 const swaggerOptions = {
   swaggerDefinition: {
     openapi: '3.0.0',
     info: {
-      title: 'Task Manager API',
-      version: '1.0.0',
-      description: 'REST API with Auth, Validation, and Documentation',
+      title: 'Task Manager API (Production Grade)',
+      version: '2.0.0',
+      description: 'REST API with Authentication, Role-based Authorization, Caching-ready Architecture, and Documentation',
     },
     servers: [
       {
@@ -52,27 +54,38 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Root URL Redirect to Swagger Docs
+// Root Endpoint Redirect
 app.get('/', (req, res) => {
   res.redirect('/api-docs');
 });
 
 // Production Health Check Endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'UP', timestamp: new Date() });
+  res.status(200).json({
+    status: 'UP',
+    database: mongoose.connection.readyState === 1 ? 'CONNECTED' : 'DISCONNECTED',
+    timestamp: new Date(),
+  });
 });
 
-// Routes
+// Routes Configuration
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/tasks', require('./src/routes/tasks'));
+
+// 5. Centralized Error Handling Middleware (Must be registered last)
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/testdb';
 
-mongoose
-  .connect(MONGO_URI)
-  .then(() => {
-    console.log('MongoDB Connected successfully!');
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  })
-  .catch((err) => console.error('Database connection error:', err));
+if (process.env.NODE_ENV !== 'test') {
+  mongoose
+    .connect(MONGO_URI)
+    .then(() => {
+      logger.info('MongoDB Connected successfully!');
+      app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+    })
+    .catch((err) => logger.error('Database connection error:', err));
+}
+
+module.exports = app;

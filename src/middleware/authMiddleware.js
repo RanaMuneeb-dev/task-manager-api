@@ -4,16 +4,21 @@ module.exports = function (req, res, next) {
   const token = req.header('Authorization');
 
   if (!token) {
-    return res.status(401).json({ message: 'No token, authorization denied' });
+    const error = new Error('No token, authorization denied');
+    error.statusCode = 401;
+    error.code = 'NO_TOKEN';
+    return next(error);
   }
 
   try {
-    // Bearer token handling
     const splitToken = token.startsWith('Bearer ') ? token.slice(7, token.length) : token;
     const decoded = jwt.verify(splitToken, process.env.JWT_SECRET || 'secretkey');
     req.user = decoded.userId;
     next();
   } catch (err) {
-    res.status(401).json({ message: 'Token is not valid' });
+    const error = new Error('Token is not valid or has expired');
+    error.statusCode = 401;
+    error.code = 'INVALID_TOKEN';
+    return next(error);
   }
 };
